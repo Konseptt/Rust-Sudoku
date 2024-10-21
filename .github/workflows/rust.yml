@@ -32,3 +32,9 @@ jobs:
 
       - name: Run rustfmt
         run: cargo fmt -- --check
+
+      - name: Check for outdated dependencies
+        run: cargo outdated
+
+      - name: Run security audit
+        run: cargo audit

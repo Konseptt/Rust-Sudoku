@@ -95,6 +95,33 @@ pub fn generate_sudoku() -> Puzzle {
 }
 ```
 
+## Module and Function Documentation
+
+### `main.rs`
+
+- **Purpose**: Entry point of the application. It generates a Sudoku puzzle, prints it, solves it, and prints the solved puzzle along with the time taken.
+- **Usage**: Run the project using `cargo run`.
+
+### `puzzle.rs`
+
+- **Purpose**: Contains the `Puzzle` struct and its associated methods.
+- **Usage**: Create a new `Puzzle` instance using `Puzzle::new(grid)` and use its methods to manipulate and print the puzzle.
+
+### `solver.rs`
+
+- **Purpose**: Contains the functions to solve and generate Sudoku puzzles.
+- **Usage**: Use `generate_sudoku` to create a new puzzle and `solve` to solve an existing puzzle.
+
+## Difficulty Levels
+
+You can customize the difficulty level of the generated Sudoku puzzles by adjusting the number of empty cells. Here are some examples:
+
+- **Easy**: 30 empty cells
+- **Medium**: 40 empty cells
+- **Hard**: 50 empty cells
+
+To change the difficulty level, modify the `generate_sudoku` function in `src/solver.rs` and adjust the number of empty cells accordingly.
+
 ## Contributing
 
 Contributions are welcome! Please follow the guidelines below to contribute to the project.
