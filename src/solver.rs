@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn test_generate_sudoku() {
-        let puzzle = generate_sudoku();
-        assert!(puzzle.grid.iter().flatten().filter(|&&cell| cell == 0).count() >= 40);
+        let mut puzzle = generate_sudoku();
+        assert!(puzzle.grid_mut().iter().flatten().filter(|&&cell| cell == 0).count() >= 40);
     }
 }
