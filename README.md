@@ -18,7 +18,7 @@ This project is a Sudoku solver and generator written in Rust. It generates a ra
 ### Clone the Repository
 
 ```sh
-git clone https://github.com/yourusername/sudoku_solver.git
+git clone https://github.com/konseptt/sudoku_solver.git
 cd sudoku_solver
 ```
 

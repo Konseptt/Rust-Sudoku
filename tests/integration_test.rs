@@ -1,5 +1,4 @@
 use suko_solver::solver::{generate_sudoku, solve};
-use suko_solver::puzzle::Puzzle;
 
 #[test]
 fn test_generate_and_solve_sudoku() {

@@ -1,7 +1,4 @@
-mod puzzle;
-mod solver;
-
-use solver::{solve, generate_sudoku};
+use suko_solver::solver::{solve, generate_sudoku};
 use std::time::Instant;
 
 /// Entry point of the application.

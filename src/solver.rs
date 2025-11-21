@@ -3,7 +3,8 @@ use rand::seq::SliceRandom;
 use rand::thread_rng;
 use rand::Rng;
 
-/// Solves the given Sudoku puzzle.
+/// Solves the given Sudoku puzzle using an optimized backtracking algorithm
+/// with constraint propagation and MRV heuristic.
 ///
 /// # Arguments
 ///
@@ -14,90 +15,139 @@ use rand::Rng;
 /// `true` if the puzzle is solved successfully, `false` otherwise.
 pub fn solve(puzzle: &mut Puzzle) -> bool {
     let grid = puzzle.grid_mut();
-    solve_sudoku(grid)
+    solve_sudoku_optimized(grid)
 }
 
-/// Solves the Sudoku puzzle using backtracking algorithm.
-///
-/// # Arguments
-///
-/// * `grid` - A mutable reference to the 2D vector representing the Sudoku grid.
-///
-/// # Returns
-///
-/// `true` if the puzzle is solved successfully, `false` otherwise.
-fn solve_sudoku(grid: &mut Vec<Vec<u8>>) -> bool {
-    let empty_cells = find_empty_cells(grid);
-    solve_sudoku_with_empty_cells(grid, &empty_cells)
+/// Represents constraint state using bitsets for efficient validation.
+struct ConstraintState {
+    rows: [u16; 9],    // Bitset for each row (bits 1-9 represent numbers 1-9)
+    cols: [u16; 9],    // Bitset for each column
+    boxes: [u16; 9],   // Bitset for each 3x3 box
 }
 
-/// Solves the Sudoku puzzle with the given empty cells using backtracking algorithm.
-///
-/// # Arguments
-///
-/// * `grid` - A mutable reference to the 2D vector representing the Sudoku grid.
-/// * `empty_cells` - A slice of tuples representing the coordinates of empty cells.
-///
-/// # Returns
-///
-/// `true` if the puzzle is solved successfully, `false` otherwise.
-fn solve_sudoku_with_empty_cells(grid: &mut Vec<Vec<u8>>, empty_cells: &[(usize, usize)]) -> bool {
-    if empty_cells.is_empty() {
-        return true; // No empty cell means the puzzle is solved
+impl ConstraintState {
+    /// Creates a new constraint state from the current grid.
+    fn from_grid(grid: &Vec<Vec<u8>>) -> Self {
+        let mut state = ConstraintState {
+            rows: [0; 9],
+            cols: [0; 9],
+            boxes: [0; 9],
+        };
+
+        for (i, row) in grid.iter().enumerate() {
+            for (j, &cell) in row.iter().enumerate() {
+                if cell != 0 {
+                    let bit = 1u16 << cell;
+                    state.rows[i] |= bit;
+                    state.cols[j] |= bit;
+                    let box_idx = (i / 3) * 3 + (j / 3);
+                    state.boxes[box_idx] |= bit;
+                }
+            }
+        }
+        state
     }
 
-    let (row, col) = empty_cells[0];
-    let remaining_cells = &empty_cells[1..];
+    /// Places a number at the given position.
+    #[inline]
+    fn place(&mut self, row: usize, col: usize, num: u8) {
+        let bit = 1u16 << num;
+        self.rows[row] |= bit;
+        self.cols[col] |= bit;
+        let box_idx = (row / 3) * 3 + (col / 3);
+        self.boxes[box_idx] |= bit;
+    }
 
-    let mut nums: Vec<u8> = (1..=9).collect();
-    nums.shuffle(&mut thread_rng());
+    /// Removes a number from the given position.
+    #[inline]
+    fn remove(&mut self, row: usize, col: usize, num: u8) {
+        let bit = 1u16 << num;
+        self.rows[row] &= !bit;
+        self.cols[col] &= !bit;
+        let box_idx = (row / 3) * 3 + (col / 3);
+        self.boxes[box_idx] &= !bit;
+    }
 
-    for &num in &nums {
-        if is_valid(grid, row, col, num) {
+    /// Gets possible values for a cell using bitsets.
+    #[inline]
+    fn get_possible_values(&self, row: usize, col: usize) -> u16 {
+        let box_idx = (row / 3) * 3 + (col / 3);
+        let used = self.rows[row] | self.cols[col] | self.boxes[box_idx];
+        // All bits 1-9 minus used bits
+        0b1111111110 & !used
+    }
+
+    /// Counts the number of possible values for a cell.
+    #[inline]
+    fn count_possible(&self, row: usize, col: usize) -> u32 {
+        self.get_possible_values(row, col).count_ones()
+    }
+}
+
+/// Optimized Sudoku solver using constraint propagation and MRV heuristic.
+fn solve_sudoku_optimized(grid: &mut Vec<Vec<u8>>) -> bool {
+    let mut state = ConstraintState::from_grid(grid);
+    solve_with_constraints(grid, &mut state)
+}
+
+/// Recursive solver with constraint tracking.
+fn solve_with_constraints(grid: &mut Vec<Vec<u8>>, state: &mut ConstraintState) -> bool {
+    // Find the best cell to fill using MRV heuristic
+    let mut best_cell: Option<(usize, usize)> = None;
+    let mut min_choices = 10;
+
+    for i in 0..9 {
+        for j in 0..9 {
+            if grid[i][j] == 0 {
+                let choices = state.count_possible(i, j);
+                if choices == 0 {
+                    return false; // No valid values, backtrack immediately
+                }
+                if choices < min_choices {
+                    min_choices = choices;
+                    best_cell = Some((i, j));
+                    if min_choices == 1 {
+                        // Can't do better than 1 choice, use this cell
+                        break;
+                    }
+                }
+            }
+        }
+        if min_choices == 1 {
+            break;
+        }
+    }
+
+    // If no empty cell found, puzzle is solved
+    let (row, col) = match best_cell {
+        Some(cell) => cell,
+        None => return true,
+    };
+
+    // Try each possible value
+    let possible = state.get_possible_values(row, col);
+    for num in 1..=9u8 {
+        let bit = 1u16 << num;
+        if (possible & bit) != 0 {
+            // Place the number
             grid[row][col] = num;
-            if solve_sudoku_with_empty_cells(grid, remaining_cells) {
+            state.place(row, col, num);
+
+            // Recursively solve
+            if solve_with_constraints(grid, state) {
                 return true;
             }
-            grid[row][col] = 0; // Reset on backtrack
+
+            // Backtrack
+            grid[row][col] = 0;
+            state.remove(row, col, num);
         }
     }
 
     false
 }
 
-/// Finds the empty cells in the Sudoku grid.
-///
-/// # Arguments
-///
-/// * `grid` - A reference to the 2D vector representing the Sudoku grid.
-///
-/// # Returns
-///
-/// A vector of tuples representing the coordinates of empty cells.
-fn find_empty_cells(grid: &Vec<Vec<u8>>) -> Vec<(usize, usize)> {
-    let mut empty_cells = Vec::new();
-    for (i, row) in grid.iter().enumerate() {
-        for (j, &cell) in row.iter().enumerate() {
-            if cell == 0 {
-                empty_cells.push((i, j));
-            }
-        }
-    }
-    empty_cells
-}
-
-/// Checks if placing a number in the given cell is valid.
-///
-/// # Arguments
-///
-/// * `grid` - A reference to the 2D vector representing the Sudoku grid.
-/// * `row` - The row index of the cell.
-/// * `col` - The column index of the cell.
-/// * `num` - The number to be placed in the cell.
-///
-/// # Returns
-///
-/// `true` if the number can be placed in the cell, `false` otherwise.
+/// Legacy validation function (kept for compatibility but not used in optimized solver).
 fn is_valid(grid: &Vec<Vec<u8>>, row: usize, col: usize, num: u8) -> bool {
     // Check row
     if grid[row].contains(&num) {
@@ -129,17 +179,47 @@ fn is_valid(grid: &Vec<Vec<u8>>, row: usize, col: usize, num: u8) -> bool {
 /// A new `Puzzle` instance with a randomly generated Sudoku puzzle.
 pub fn generate_sudoku() -> Puzzle {
     let mut grid = vec![vec![0; 9]; 9];
-    solve_sudoku(&mut grid);
+    
+    // Use a randomized solver for generation to create variety
+    generate_filled_grid(&mut grid);
 
-    // Remove numbers to create the puzzle
+    // Remove numbers to create the puzzle (ensuring 40 unique cells are removed)
     let mut rng = thread_rng();
-    for _ in 0..40 { // Remove 40 numbers
+    let mut removed = 0;
+    while removed < 40 {
         let row = rng.gen_range(0..9);
         let col = rng.gen_range(0..9);
-        grid[row][col] = 0;
+        if grid[row][col] != 0 {
+            grid[row][col] = 0;
+            removed += 1;
+        }
     }
 
     Puzzle::new(grid)
+}
+
+/// Helper function to generate a filled Sudoku grid with randomization.
+fn generate_filled_grid(grid: &mut Vec<Vec<u8>>) -> bool {
+    for i in 0..9 {
+        for j in 0..9 {
+            if grid[i][j] == 0 {
+                let mut nums: Vec<u8> = (1..=9).collect();
+                nums.shuffle(&mut thread_rng());
+                
+                for &num in &nums {
+                    if is_valid(grid, i, j, num) {
+                        grid[i][j] = num;
+                        if generate_filled_grid(grid) {
+                            return true;
+                        }
+                        grid[i][j] = 0;
+                    }
+                }
+                return false;
+            }
+        }
+    }
+    true
 }
 
 #[cfg(test)]
@@ -166,6 +246,6 @@ mod tests {
     #[test]
     fn test_generate_sudoku() {
         let puzzle = generate_sudoku();
-        assert!(puzzle.grid.iter().flatten().filter(|&&cell| cell == 0).count() >= 40);
+        assert!(puzzle.grid().iter().flatten().filter(|&&cell| cell == 0).count() >= 40);
     }
 }

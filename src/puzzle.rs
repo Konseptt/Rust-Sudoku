@@ -35,4 +35,13 @@ impl Puzzle {
     pub fn grid_mut(&mut self) -> &mut Vec<Vec<u8>> {
         &mut self.grid
     }
+
+    /// Returns a reference to the grid.
+    ///
+    /// # Returns
+    ///
+    /// A reference to the 2D vector representing the Sudoku grid.
+    pub fn grid(&self) -> &Vec<Vec<u8>> {
+        &self.grid
+    }
 }
