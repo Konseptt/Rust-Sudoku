@@ -3,8 +3,8 @@ use rand::seq::SliceRandom;
 use rand::thread_rng;
 use rand::Rng;
 
-/// Solves the given Sudoku puzzle using an optimized backtracking algorithm
-/// with constraint propagation and MRV heuristic.
+/// Solves the given Sudoku puzzle using an ultra-optimized backtracking algorithm
+/// with constraint propagation, naked/hidden singles, and MRV heuristic.
 ///
 /// # Arguments
 ///
@@ -15,41 +15,64 @@ use rand::Rng;
 /// `true` if the puzzle is solved successfully, `false` otherwise.
 pub fn solve(puzzle: &mut Puzzle) -> bool {
     let grid = puzzle.grid_mut();
-    solve_sudoku_optimized(grid)
+    
+    // Convert to flat array for better cache locality
+    let mut flat_grid = [0u8; 81];
+    for i in 0..9 {
+        for j in 0..9 {
+            flat_grid[i * 9 + j] = grid[i][j];
+        }
+    }
+    
+    let result = solve_sudoku_ultra(& mut flat_grid);
+    
+    // Convert back to 2D grid
+    if result {
+        for i in 0..9 {
+            for j in 0..9 {
+                grid[i][j] = flat_grid[i * 9 + j];
+            }
+        }
+    }
+    
+    result
 }
 
 /// Represents constraint state using bitsets for efficient validation.
+/// Uses bitmasks where bits 1-9 represent numbers 1-9.
+#[derive(Clone)]
 struct ConstraintState {
-    rows: [u16; 9],    // Bitset for each row (bits 1-9 represent numbers 1-9)
+    rows: [u16; 9],    // Bitset for each row
     cols: [u16; 9],    // Bitset for each column
     boxes: [u16; 9],   // Bitset for each 3x3 box
 }
 
 impl ConstraintState {
-    /// Creates a new constraint state from the current grid.
-    fn from_grid(grid: &Vec<Vec<u8>>) -> Self {
+    /// Creates a new constraint state from a flat grid.
+    #[inline]
+    fn from_grid(grid: &[u8; 81]) -> Self {
         let mut state = ConstraintState {
             rows: [0; 9],
             cols: [0; 9],
             boxes: [0; 9],
         };
 
-        for (i, row) in grid.iter().enumerate() {
-            for (j, &cell) in row.iter().enumerate() {
-                if cell != 0 {
-                    let bit = 1u16 << cell;
-                    state.rows[i] |= bit;
-                    state.cols[j] |= bit;
-                    let box_idx = (i / 3) * 3 + (j / 3);
-                    state.boxes[box_idx] |= bit;
-                }
+        for idx in 0..81 {
+            let cell = grid[idx];
+            if cell != 0 {
+                let (row, col) = (idx / 9, idx % 9);
+                let bit = 1u16 << cell;
+                state.rows[row] |= bit;
+                state.cols[col] |= bit;
+                let box_idx = (row / 3) * 3 + (col / 3);
+                state.boxes[box_idx] |= bit;
             }
         }
         state
     }
 
     /// Places a number at the given position.
-    #[inline]
+    #[inline(always)]
     fn place(&mut self, row: usize, col: usize, num: u8) {
         let bit = 1u16 << num;
         self.rows[row] |= bit;
@@ -59,7 +82,7 @@ impl ConstraintState {
     }
 
     /// Removes a number from the given position.
-    #[inline]
+    #[inline(always)]
     fn remove(&mut self, row: usize, col: usize, num: u8) {
         let bit = 1u16 << num;
         self.rows[row] &= !bit;
@@ -69,7 +92,7 @@ impl ConstraintState {
     }
 
     /// Gets possible values for a cell using bitsets.
-    #[inline]
+    #[inline(always)]
     fn get_possible_values(&self, row: usize, col: usize) -> u16 {
         let box_idx = (row / 3) * 3 + (col / 3);
         let used = self.rows[row] | self.cols[col] | self.boxes[box_idx];
@@ -78,68 +101,216 @@ impl ConstraintState {
     }
 
     /// Counts the number of possible values for a cell.
-    #[inline]
+    #[inline(always)]
     fn count_possible(&self, row: usize, col: usize) -> u32 {
         self.get_possible_values(row, col).count_ones()
     }
+    
+    /// Extracts the single value from a bitset (assumes exactly one bit is set).
+    #[inline(always)]
+    fn extract_single_value(bitset: u16) -> u8 {
+        bitset.trailing_zeros() as u8
+    }
 }
 
-/// Optimized Sudoku solver using constraint propagation and MRV heuristic.
-fn solve_sudoku_optimized(grid: &mut Vec<Vec<u8>>) -> bool {
+/// Ultra-optimized Sudoku solver with naked singles, hidden singles, and efficient MRV.
+fn solve_sudoku_ultra(grid: &mut [u8; 81]) -> bool {
     let mut state = ConstraintState::from_grid(grid);
-    solve_with_constraints(grid, &mut state)
+    
+    // Apply naked singles and hidden singles before backtracking
+    if !apply_constraint_propagation(grid, &mut state) {
+        return false;
+    }
+    
+    solve_with_optimizations(grid, &mut state)
 }
 
-/// Recursive solver with constraint tracking.
-fn solve_with_constraints(grid: &mut Vec<Vec<u8>>, state: &mut ConstraintState) -> bool {
-    // Find the best cell to fill using MRV heuristic
-    let mut best_cell: Option<(usize, usize)> = None;
-    let mut min_choices = 10;
-
-    for i in 0..9 {
-        for j in 0..9 {
-            if grid[i][j] == 0 {
-                let choices = state.count_possible(i, j);
-                if choices == 0 {
-                    return false; // No valid values, backtrack immediately
+/// Applies naked singles (cells with one possibility) and hidden singles
+/// (numbers that can only go in one place in a unit).
+#[inline]
+fn apply_constraint_propagation(grid: &mut [u8; 81], state: &mut ConstraintState) -> bool {
+    let mut progress = true;
+    
+    while progress {
+        progress = false;
+        
+        // Naked singles: fill cells with only one possibility
+        for idx in 0..81 {
+            if grid[idx] == 0 {
+                let (row, col) = (idx / 9, idx % 9);
+                let possible = state.get_possible_values(row, col);
+                
+                if possible == 0 {
+                    return false; // No valid values
                 }
-                if choices < min_choices {
-                    min_choices = choices;
-                    best_cell = Some((i, j));
-                    if min_choices == 1 {
-                        // Can't do better than 1 choice, use this cell
-                        break;
-                    }
+                
+                if possible.count_ones() == 1 {
+                    let num = ConstraintState::extract_single_value(possible);
+                    grid[idx] = num;
+                    state.place(row, col, num);
+                    progress = true;
                 }
             }
         }
-        if min_choices == 1 {
-            break;
+        
+        // Hidden singles: numbers that can only go in one place
+        if apply_hidden_singles(grid, state) {
+            progress = true;
+        }
+    }
+    
+    true
+}
+
+/// Finds and fills hidden singles (numbers that can only go in one cell within a unit).
+#[inline]
+fn apply_hidden_singles(grid: &mut [u8; 81], state: &mut ConstraintState) -> bool {
+    let mut progress = false;
+    
+    // Check rows
+    for row in 0..9 {
+        for num in 1..=9u8 {
+            let bit = 1u16 << num;
+            if (state.rows[row] & bit) != 0 {
+                continue; // Already placed
+            }
+            
+            let mut possible_positions = Vec::with_capacity(9);
+            for col in 0..9 {
+                let idx = row * 9 + col;
+                if grid[idx] == 0 {
+                    let possible = state.get_possible_values(row, col);
+                    if (possible & bit) != 0 {
+                        possible_positions.push((row, col, idx));
+                    }
+                }
+            }
+            
+            if possible_positions.len() == 1 {
+                let (r, c, idx) = possible_positions[0];
+                grid[idx] = num;
+                state.place(r, c, num);
+                progress = true;
+            }
+        }
+    }
+    
+    // Check columns
+    for col in 0..9 {
+        for num in 1..=9u8 {
+            let bit = 1u16 << num;
+            if (state.cols[col] & bit) != 0 {
+                continue;
+            }
+            
+            let mut possible_positions = Vec::with_capacity(9);
+            for row in 0..9 {
+                let idx = row * 9 + col;
+                if grid[idx] == 0 {
+                    let possible = state.get_possible_values(row, col);
+                    if (possible & bit) != 0 {
+                        possible_positions.push((row, col, idx));
+                    }
+                }
+            }
+            
+            if possible_positions.len() == 1 {
+                let (r, c, idx) = possible_positions[0];
+                grid[idx] = num;
+                state.place(r, c, num);
+                progress = true;
+            }
+        }
+    }
+    
+    // Check boxes
+    for box_idx in 0..9 {
+        for num in 1..=9u8 {
+            let bit = 1u16 << num;
+            if (state.boxes[box_idx] & bit) != 0 {
+                continue;
+            }
+            
+            let box_row = (box_idx / 3) * 3;
+            let box_col = (box_idx % 3) * 3;
+            let mut possible_positions = Vec::with_capacity(9);
+            
+            for i in 0..3 {
+                for j in 0..3 {
+                    let row = box_row + i;
+                    let col = box_col + j;
+                    let idx = row * 9 + col;
+                    if grid[idx] == 0 {
+                        let possible = state.get_possible_values(row, col);
+                        if (possible & bit) != 0 {
+                            possible_positions.push((row, col, idx));
+                        }
+                    }
+                }
+            }
+            
+            if possible_positions.len() == 1 {
+                let (r, c, idx) = possible_positions[0];
+                grid[idx] = num;
+                state.place(r, c, num);
+                progress = true;
+            }
+        }
+    }
+    
+    progress
+}
+
+/// Recursive solver with optimized MRV cell selection.
+fn solve_with_optimizations(grid: &mut [u8; 81], state: &mut ConstraintState) -> bool {
+    // Find the best cell using MRV heuristic with early termination
+    let mut best_cell: Option<(usize, usize, usize)> = None;
+    let mut min_choices = 10;
+
+    for idx in 0..81 {
+        if grid[idx] == 0 {
+            let (row, col) = (idx / 9, idx % 9);
+            let choices = state.count_possible(row, col);
+            
+            if choices == 0 {
+                return false; // No valid values, backtrack immediately
+            }
+            
+            if choices < min_choices {
+                min_choices = choices;
+                best_cell = Some((idx, row, col));
+                
+                if min_choices == 1 {
+                    // Can't do better than 1 choice
+                    break;
+                }
+            }
         }
     }
 
     // If no empty cell found, puzzle is solved
-    let (row, col) = match best_cell {
+    let (idx, row, col) = match best_cell {
         Some(cell) => cell,
         None => return true,
     };
 
     // Try each possible value
     let possible = state.get_possible_values(row, col);
+    
     for num in 1..=9u8 {
         let bit = 1u16 << num;
         if (possible & bit) != 0 {
             // Place the number
-            grid[row][col] = num;
+            grid[idx] = num;
             state.place(row, col, num);
 
             // Recursively solve
-            if solve_with_constraints(grid, state) {
+            if solve_with_optimizations(grid, state) {
                 return true;
             }
 
             // Backtrack
-            grid[row][col] = 0;
+            grid[idx] = 0;
             state.remove(row, col, num);
         }
     }
@@ -147,7 +318,8 @@ fn solve_with_constraints(grid: &mut Vec<Vec<u8>>, state: &mut ConstraintState) 
     false
 }
 
-/// Legacy validation function (kept for compatibility but not used in optimized solver).
+
+/// Legacy validation function (kept for compatibility in generator).
 fn is_valid(grid: &Vec<Vec<u8>>, row: usize, col: usize, num: u8) -> bool {
     // Check row
     if grid[row].contains(&num) {
@@ -247,5 +419,23 @@ mod tests {
     fn test_generate_sudoku() {
         let puzzle = generate_sudoku();
         assert!(puzzle.grid().iter().flatten().filter(|&&cell| cell == 0).count() >= 40);
+    }
+    
+    #[test]
+    fn test_hard_puzzle() {
+        // One of the hardest known sudoku puzzles
+        let mut puzzle = Puzzle::new(vec![
+            vec![8, 0, 0, 0, 0, 0, 0, 0, 0],
+            vec![0, 0, 3, 6, 0, 0, 0, 0, 0],
+            vec![0, 7, 0, 0, 9, 0, 2, 0, 0],
+            vec![0, 5, 0, 0, 0, 7, 0, 0, 0],
+            vec![0, 0, 0, 0, 4, 5, 7, 0, 0],
+            vec![0, 0, 0, 1, 0, 0, 0, 3, 0],
+            vec![0, 0, 1, 0, 0, 0, 0, 6, 8],
+            vec![0, 0, 8, 5, 0, 0, 0, 1, 0],
+            vec![0, 9, 0, 0, 0, 0, 4, 0, 0],
+        ]);
+
+        assert!(solve(&mut puzzle));
     }
 }
