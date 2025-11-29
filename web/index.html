@@ -10,135 +10,104 @@
     <title>Sudoku Solver | Ultra-Fast Algorithm</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Comic+Neue:wght@300;400;700&family=Patrick+Hand&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
-</head>
+    <!DOCTYPE html>
+    <html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description"
+            content="High-performance Sudoku solver with ultra-fast algorithm, manual input, and random puzzle generation">
+        <meta name="keywords" content="sudoku, solver, puzzle, game, algorithm">
+        <title>Sudoku Solver | Ultra-Fast Algorithm</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link
+            href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Comic+Neue:wght@300;400;700&family=Patrick+Hand&display=swap"
+            rel="stylesheet">
+        <link rel="stylesheet" href="style.css">
+    </head>
 
 <body>
-    <!-- Particle Canvas -->
-    <canvas id="particles-canvas"></canvas>
+    <!-- SVG Filters for Hand-Drawn Effect -->
+    <svg style="display: none;">
+        <defs>
+            <filter id="rough-paper">
+                <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="5" result="noise" />
+                <feDiffuseLighting in="noise" lighting-color="#fff9f0" surfaceScale="2">
+                    <feDistantLight azimuth="45" elevation="60" />
+                </feDiffuseLighting>
+            </filter>
+            <filter id="pencil-texture">
+                <feTurbulence type="fractalNoise" baseFrequency="0.5" numOctaves="5" stitchTiles="stitch" />
+                <feColorMatrix type="saturate" values="0" />
+                <feComponentTransfer>
+                    <feFuncR type="linear" slope="0.5" />
+                    <feFuncG type="linear" slope="0.5" />
+                    <feFuncB type="linear" slope="0.5" />
+                </feComponentTransfer>
+                <feBlend mode="multiply" in2="SourceGraphic" />
+            </filter>
+        </defs>
+    </svg>
 
-    <!-- Floating shapes background -->
-    <div class="floating-shapes">
-        <div class="shape shape-1">◆</div>
-        <div class="shape shape-2">●</div>
-        <div class="shape shape-3">■</div>
-        <div class="shape shape-4">▲</div>
-        <div class="shape shape-5">★</div>
-    </div>
+    <div class="notebook-page">
+        <div class="holes"></div>
 
-    <div class="container">
         <header>
-            <div class="header-wobble">
-                <h1 class="title-handwritten">
-                    <span class="letter" data-letter="S">S</span>
-                    <span class="letter" data-letter="u">u</span>
-                    <span class="letter" data-letter="d">d</span>
-                    <span class="letter" data-letter="o">o</span>
-                    <span class="letter" data-letter="k">k</span>
-                    <span class="letter" data-letter="u">u</span>
-                    <span class="emoji">🧩</span>
-                    <span class="letter" data-letter="S">S</span>
-                    <span class="letter" data-letter="o">o</span>
-                    <span class="letter" data-letter="l">l</span>
-                    <span class="letter" data-letter="v">v</span>
-                    <span class="letter" data-letter="e">e</span>
-                    <span class="letter" data-letter="r">r</span>
-                </h1>
+            <div class="doodle-title">
+                <h1>Sudoku</h1>
+                <span class="scribble-underline"></span>
             </div>
-            <p class="subtitle-handwritten">✨ powered by rust magic ✨</p>
-            <div class="fun-fact">
-                <span class="fun-fact-icon">💡</span>
-                <span class="fun-fact-text" id="fun-fact-text">Click cells to enter numbers!</span>
-            </div>
+            <p class="handwritten-subtitle">My Puzzle Notebook ✏️</p>
         </header>
 
         <main>
-            <!-- Puzzle Container with sketch border -->
-            <div class="puzzle-wrapper">
-                <div class="sketch-corner corner-tl"></div>
-                <div class="sketch-corner corner-tr"></div>
-                <div class="sketch-corner corner-bl"></div>
-                <div class="sketch-corner corner-br"></div>
-
-                <div class="grid-container">
+            <div class="game-container">
+                <div class="sketch-border">
                     <div id="sudoku-grid" class="sudoku-grid">
-                        <!-- Grid cells will be generated by JavaScript -->
+                        <!-- Grid cells generated by JS -->
                     </div>
                 </div>
-            </div>
 
-            <!-- Playful Controls -->
-            <div class="controls">
-                <button id="clear-btn" class="btn btn-clear" data-tooltip="Start fresh!">
-                    <span class="btn-text">Clear</span>
-                    <span class="btn-emoji">🗑️</span>
-                </button>
-                <button id="generate-btn" class="btn btn-generate" data-tooltip="Surprise me!">
-                    <span class="btn-text">Generate</span>
-                    <span class="btn-emoji">🎲</span>
-                </button>
-                <button id="solve-btn" class="btn btn-solve" data-tooltip="Show me the way!">
-                    <span class="btn-text">Solve</span>
-                    <span class="btn-emoji">✨</span>
-                </button>
-            </div>
-
-            <!-- Status Area with personality -->
-            <div id="status-area" class="status-area">
-                <div class="status-bubble">
-                    <div id="status-message" class="status-message">Ready to solve! 🚀</div>
-                    <div id="timing-display" class="timing-display"></div>
-                </div>
-            </div>
-
-            <!-- Interactive Tips -->
-            <div class="tips-carousel">
-                <div class="tip-card" id="tip-card">
-                    <span class="tip-icon">💡</span>
-                    <p class="tip-text">Use arrow keys to navigate between cells!</p>
-                </div>
-            </div>
-
-            <!-- Collapsible Info Panel -->
-            <div class="info-panel-wrapper">
-                <button class="info-toggle" id="info-toggle">
-                    <span class="toggle-text">How does it work?</span>
-                    <span class="toggle-arrow">▼</span>
-                </button>
-                <div class="info-panel" id="info-panel">
-                    <div class="info-content">
-                        <div class="info-section">
-                            <h3>🎮 How to Play</h3>
-                            <ul class="fun-list">
-                                <li>👆 Click cells and type 1-9</li>
-                                <li>⌨️ Arrow keys to navigate</li>
-                                <li>🎲 Generate random puzzles</li>
-                                <li>✨ Solve instantly!</li>
-                            </ul>
+                <div class="notebook-sidebar">
+                    <div class="doodle-mascot">
+                        <div id="mascot-drawing" class="mascot-idle">
+                            (•_•)
+                            <br>
+                            <span style="font-size: 0.8em;">/||\</span>
                         </div>
-
-                        <div class="info-section">
-                            <h3>⚡ Algorithm Magic</h3>
-                            <ul class="fun-list">
-                                <li>🔍 Smart constraint tracking</li>
-                                <li>🧠 MRV heuristic selection</li>
-                                <li>⚡ Lightning-fast backtracking</li>
-                                <li>🎯 Solves in microseconds!</li>
-                            </ul>
+                        <div class="speech-bubble" id="status-message">
+                            Let's solve some puzzles!
                         </div>
+                    </div>
 
-                        <div class="fun-stats">
-                            <div class="stat-item">
-                                <div class="stat-number" id="puzzles-solved">0</div>
-                                <div class="stat-label">Puzzles Solved</div>
-                            </div>
-                            <div class="stat-item">
-                                <div class="stat-number" id="fastest-time">-</div>
-                                <div class="stat-label">Fastest Time</div>
-                            </div>
+                    <div class="controls-area">
+                        <button id="generate-btn" class="sketch-btn">
+                            <span>New Puzzle</span>
+                            <svg class="btn-scribble" viewBox="0 0 100 10">
+                                <path d="M0,5 Q50,10 100,5" fill="none" stroke="currentColor" stroke-width="2" />
+                            </svg>
+                        </button>
+                        <button id="solve-btn" class="sketch-btn primary">
+                            <span>Solve It!</span>
+                            <svg class="btn-scribble" viewBox="0 0 100 10">
+                                <path d="M0,5 Q50,0 100,5" fill="none" stroke="currentColor" stroke-width="2" />
+                            </svg>
+                        </button>
+                        <button id="clear-btn" class="sketch-btn danger">
+                            <span>Erase All</span>
+                            <svg class="btn-scribble" viewBox="0 0 100 10">
+                                <path d="M0,5 Q50,10 100,5" fill="none" stroke="currentColor" stroke-width="2" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="stats-doodle">
+                        <h3>Stats</h3>
+                        <div class="stat-row">
+                            <span>Time:</span>
+                            <span id="timing-display" class="highlight-marker">--</span>
                         </div>
                     </div>
                 </div>
@@ -146,27 +115,18 @@
         </main>
 
         <footer>
-            <div class="footer-doodle">
-                <span>Made with</span>
-                <span class="heart">❤️</span>
-                <span>and</span>
-                <span class="rust">🦀</span>
-            </div>
+            <p class="doodle-footer">
+                ~ powered by rust & coffee ~
+            </p>
         </footer>
     </div>
 
-    <!-- Celebration Canvas -->
-    <canvas id="confetti-canvas"></canvas>
-
-    <!-- Loading Overlay with character -->
     <div id="loading-overlay" class="loading-overlay hidden">
-        <div class="loading-character">
-            <div class="loading-face">🤔</div>
-            <div class="loading-text">Thinking...</div>
-            <div class="loading-dots">
-                <span>.</span><span>.</span><span>.</span>
-            </div>
+        <div class="pencil-loading">
+            <div class="pencil"></div>
+            <div class="drawing-line"></div>
         </div>
+        <p>Thinking...</p>
     </div>
 
     <script src="app.js"></script>

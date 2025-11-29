@@ -13,25 +13,38 @@ const solveBtn = document.getElementById('solve-btn');
 const statusMessage = document.getElementById('status-message');
 const timingDisplay = document.getElementById('timing-display');
 const loadingOverlay = document.getElementById('loading-overlay');
+const mascotDrawing = document.getElementById('mascot-drawing');
+
+// ===== MASCOT EMOTIONS =====
+const MASCOT = {
+    IDLE: '(•_•)\n<br><span style="font-size: 0.8em;">/||\\</span>',
+    THINKING: '(O_O)\n<br><span style="font-size: 0.8em;">/||\\</span>',
+    HAPPY: '(^‿^)\n<br><span style="font-size: 0.8em;">\\||/</span>',
+    SAD: '(>_<)\n<br><span style="font-size: 0.8em;">/||\\</span>',
+    CONFUSED: '(o_O)\n<br><span style="font-size: 0.8em;">/||\\</span>'
+};
 
 // ===== INITIALIZATION =====
 function init() {
     createGrid();
     attachEventListeners();
     checkServerHealth();
+    setMascot(MASCOT.IDLE);
 }
 
 function createGrid() {
+    gridElement.innerHTML = '';
     for (let i = 0; i < 81; i++) {
         const cell = document.createElement('input');
         cell.type = 'text';
         cell.maxLength = 1;
         cell.className = 'sudoku-cell';
         cell.dataset.index = i;
-        
+
         cell.addEventListener('input', handleCellInput);
         cell.addEventListener('keydown', handleCellNavigation);
-        
+        cell.addEventListener('focus', () => setMascot(MASCOT.IDLE));
+
         gridElement.appendChild(cell);
     }
 }
@@ -46,56 +59,50 @@ function attachEventListeners() {
 function handleCellInput(e) {
     const cell = e.target;
     const value = cell.value;
-    
+
     // Only allow numbers 1-9
     if (value !== '' && (!/^[1-9]$/.test(value))) {
         cell.value = '';
+        setMascot(MASCOT.CONFUSED);
+        updateStatus("Numbers only, please!");
         return;
     }
-    
+
     const index = parseInt(cell.dataset.index);
     const row = Math.floor(index / 9);
     const col = index % 9;
-    
+
     currentGrid[row][col] = value === '' ? 0 : parseInt(value);
-    
+
     // Clear any error state
     cell.classList.remove('error');
     cell.classList.remove('solved');
+
+    if (value !== '') {
+        playScribbleSound();
+    }
 }
 
 function handleCellNavigation(e) {
     const cell = e.target;
     const index = parseInt(cell.dataset.index);
     let newIndex = index;
-    
-    switch(e.key) {
-        case 'ArrowUp':
-            newIndex = index - 9;
-            e.preventDefault();
-            break;
-        case 'ArrowDown':
-            newIndex = index + 9;
-            e.preventDefault();
-            break;
-        case 'ArrowLeft':
-            newIndex = index - 1;
-            e.preventDefault();
-            break;
-        case 'ArrowRight':
-            newIndex = index + 1;
-            e.preventDefault();
-            break;
+
+    switch (e.key) {
+        case 'ArrowUp': newIndex = index - 9; break;
+        case 'ArrowDown': newIndex = index + 9; break;
+        case 'ArrowLeft': newIndex = index - 1; break;
+        case 'ArrowRight': newIndex = index + 1; break;
         case 'Backspace':
         case 'Delete':
             cell.value = '';
             currentGrid[Math.floor(index / 9)][index % 9] = 0;
             break;
-        default:
-            return;
+        default: return;
     }
-    
+
     if (newIndex >= 0 && newIndex < 81) {
+        e.preventDefault();
         const cells = document.querySelectorAll('.sudoku-cell');
         cells[newIndex].focus();
     }
@@ -108,22 +115,23 @@ function clearGrid() {
         cell.removeAttribute('readonly');
         cell.classList.remove('solved', 'error');
     });
-    
+
     currentGrid = Array(9).fill(null).map(() => Array(9).fill(0));
     isGeneratedPuzzle = Array(9).fill(null).map(() => Array(9).fill(false));
-    
-    updateStatus('Grid cleared', false);
-    timingDisplay.textContent = '';
+
+    updateStatus('Clean slate!');
+    timingDisplay.textContent = '--';
+    setMascot(MASCOT.IDLE);
 }
 
 function setGridFromArray(grid, markAsReadonly = false) {
     const cells = document.querySelectorAll('.sudoku-cell');
-    
+
     grid.forEach((row, i) => {
         row.forEach((value, j) => {
             const index = i * 9 + j;
             const cell = cells[index];
-            
+
             if (value !== 0) {
                 cell.value = value;
                 if (markAsReadonly) {
@@ -137,32 +145,27 @@ function setGridFromArray(grid, markAsReadonly = false) {
                     isGeneratedPuzzle[i][j] = false;
                 }
             }
-            
+
             currentGrid[i][j] = value;
         });
     });
 }
 
-function setSolvedGrid(grid, animated = true) {
+function setSolvedGrid(grid) {
     const cells = document.querySelectorAll('.sudoku-cell');
-    
+
     grid.forEach((row, i) => {
         row.forEach((value, j) => {
             const index = i * 9 + j;
             const cell = cells[index];
-            
+
             if (value !== 0 && currentGrid[i][j] === 0) {
-                if (animated) {
-                    setTimeout(() => {
-                        cell.value = value;
-                        cell.classList.add('solved');
-                    }, index * 10); // Stagger animation
-                } else {
+                setTimeout(() => {
                     cell.value = value;
                     cell.classList.add('solved');
-                }
+                }, index * 5); // Faster stagger for doodle effect
             }
-            
+
             currentGrid[i][j] = value;
         });
     });
@@ -176,34 +179,30 @@ async function checkServerHealth() {
             console.log('✅ Server is running');
         }
     } catch (error) {
-        updateStatus('⚠️ Server not running. Please start the Rust server first.', true);
-        console.error('Server health check failed:', error);
+        updateStatus('Server is napping... (Start Rust!)');
+        setMascot(MASCOT.SAD);
     }
 }
 
 async function generatePuzzle() {
     showLoading(true);
-    updateStatus('Generating puzzle...', false);
-    
+    updateStatus('Drawing a new puzzle...');
+    setMascot(MASCOT.THINKING);
+
     try {
         const response = await fetch(`${API_BASE_URL}/generate`);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
+        if (!response.ok) throw new Error('Network response was not ok');
+
         const data = await response.json();
-        
-        // Clear previous grid
         clearGrid();
-        
-        // Set the generated puzzle
         setGridFromArray(data.grid, true);
-        
-        updateStatus('✅ Puzzle generated successfully!', false);
-        timingDisplay.textContent = '';
+
+        updateStatus('Here is a fresh one!');
+        setMascot(MASCOT.HAPPY);
+        timingDisplay.textContent = '--';
     } catch (error) {
-        updateStatus('❌ Failed to generate puzzle. Is the server running?', true);
+        updateStatus('Oops, I dropped my pencil.');
+        setMascot(MASCOT.SAD);
         console.error('Generate error:', error);
     } finally {
         showLoading(false);
@@ -211,50 +210,46 @@ async function generatePuzzle() {
 }
 
 async function solvePuzzle() {
-    // Check if grid is empty
     const isEmpty = currentGrid.every(row => row.every(cell => cell === 0));
     if (isEmpty) {
-        updateStatus('❌ Please enter a puzzle or generate one first', true);
+        updateStatus('The page is empty!');
+        setMascot(MASCOT.CONFUSED);
         return;
     }
-    
+
     showLoading(true);
-    updateStatus('Solving puzzle...', false);
-    timingDisplay.textContent = '';
-    
+    updateStatus('Calculating...');
+    setMascot(MASCOT.THINKING);
+    timingDisplay.textContent = '--';
+
     try {
         const response = await fetch(`${API_BASE_URL}/solve`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                grid: currentGrid
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ grid: currentGrid })
         });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
+
+        if (!response.ok) throw new Error('Network response was not ok');
+
         const data = await response.json();
-        
+
         if (data.success) {
-            setSolvedGrid(data.solved_grid, true);
-            
-            updateStatus('✅ Puzzle solved successfully!', false);
-            
-            // Display timing
+            setSolvedGrid(data.solved_grid);
+            updateStatus('Ta-da! Solved it!');
+            setMascot(MASCOT.HAPPY);
+
             if (data.solve_time_micros < 1000) {
-                timingDisplay.textContent = `⚡ ${data.solve_time_micros}μs`;
+                timingDisplay.textContent = `${data.solve_time_micros}μs`;
             } else {
-                timingDisplay.textContent = `⚡ ${data.solve_time_ms.toFixed(3)}ms`;
+                timingDisplay.textContent = `${data.solve_time_ms.toFixed(3)}ms`;
             }
         } else {
-            updateStatus(`❌ ${data.error || 'Unable to solve puzzle'}`, true);
+            updateStatus(data.error || 'I am stumped...');
+            setMascot(MASCOT.SAD);
         }
     } catch (error) {
-        updateStatus('❌ Failed to solve puzzle. Is the server running?', true);
+        updateStatus('My brain hurts...');
+        setMascot(MASCOT.SAD);
         console.error('Solve error:', error);
     } finally {
         showLoading(false);
@@ -262,29 +257,24 @@ async function solvePuzzle() {
 }
 
 // ===== UI HELPERS =====
-function updateStatus(message, isError = false) {
+function updateStatus(message) {
     statusMessage.textContent = message;
-    statusMessage.className = 'status-message';
-    
-    if (isError) {
-        statusMessage.classList.add('error');
-    } else if (message.includes('✅')) {
-        statusMessage.classList.add('success');
-    }
+}
+
+function setMascot(emotion) {
+    mascotDrawing.innerHTML = emotion;
 }
 
 function showLoading(show) {
     if (show) {
         loadingOverlay.classList.remove('hidden');
-        clearBtn.disabled = true;
-        generateBtn.disabled = true;
-        solveBtn.disabled = true;
     } else {
         loadingOverlay.classList.add('hidden');
-        clearBtn.disabled = false;
-        generateBtn.disabled = false;
-        solveBtn.disabled = false;
     }
+}
+
+function playScribbleSound() {
+    // Placeholder for sound effect if we wanted to add audio
 }
 
 // ===== START APPLICATION =====
