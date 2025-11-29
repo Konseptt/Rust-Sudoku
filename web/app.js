@@ -1,5 +1,9 @@
 // ===== CONFIGURATION =====
-const API_BASE_URL = 'http://localhost:8080/api';
+// Auto-detect if running on GitHub Pages or locally
+const isGitHubPages = window.location.hostname.includes('github.io');
+const API_BASE_URL = isGitHubPages
+    ? 'https://rust-sudoku-backend.onrender.com/api'  // Update with your backend URL
+    : 'http://localhost:8080/api';
 
 // ===== STATE =====
 let currentGrid = Array(9).fill(null).map(() => Array(9).fill(0));
