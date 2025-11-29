@@ -57,8 +57,7 @@ impl ConstraintState {
             boxes: [0; 9],
         };
 
-        for idx in 0..81 {
-            let cell = grid[idx];
+        for (idx, &cell) in grid.iter().enumerate().take(81) {
             if cell != 0 {
                 let (row, col) = (idx / 9, idx % 9);
                 let bit = 1u16 << cell;
@@ -135,8 +134,8 @@ fn apply_constraint_propagation(grid: &mut [u8; 81], state: &mut ConstraintState
         progress = false;
         
         // Naked singles: fill cells with only one possibility
-        for idx in 0..81 {
-            if grid[idx] == 0 {
+        for (idx, &cell) in grid.iter().enumerate().take(81) {
+            if cell == 0 {
                 let (row, col) = (idx / 9, idx % 9);
                 let possible = state.get_possible_values(row, col);
                 
@@ -267,8 +266,8 @@ fn solve_with_optimizations(grid: &mut [u8; 81], state: &mut ConstraintState) ->
     let mut best_cell: Option<(usize, usize, usize)> = None;
     let mut min_choices = 10;
 
-    for idx in 0..81 {
-        if grid[idx] == 0 {
+    for (idx, &cell) in grid.iter().enumerate().take(81) {
+        if cell == 0 {
             let (row, col) = (idx / 9, idx % 9);
             let choices = state.count_possible(row, col);
             
@@ -320,7 +319,7 @@ fn solve_with_optimizations(grid: &mut [u8; 81], state: &mut ConstraintState) ->
 
 
 /// Legacy validation function (kept for compatibility in generator).
-fn is_valid(grid: &Vec<Vec<u8>>, row: usize, col: usize, num: u8) -> bool {
+fn is_valid(grid: &[Vec<u8>], row: usize, col: usize, num: u8) -> bool {
     // Check row
     if grid[row].contains(&num) {
         return false;
