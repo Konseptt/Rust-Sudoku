@@ -2,7 +2,7 @@
 // Auto-detect if running on GitHub Pages or locally
 const isGitHubPages = window.location.hostname.includes('github.io');
 const API_BASE_URL = isGitHubPages
-    ? 'https://rust-sudoku-backend.onrender.com/api'  // Update with your backend URL
+    ? 'https://rust-sudoku.onrender.com'  // Update with your backend URL
     : 'http://localhost:8080/api';
 
 // ===== STATE =====

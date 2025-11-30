@@ -134,6 +134,8 @@ fn apply_constraint_propagation(grid: &mut [u8; 81], state: &mut ConstraintState
         progress = false;
         
         // Naked singles: fill cells with only one possibility
+        // Collect the updates first to avoid borrowing conflicts
+        let mut updates = Vec::new();
         for (idx, &cell) in grid.iter().enumerate().take(81) {
             if cell == 0 {
                 let (row, col) = (idx / 9, idx % 9);
@@ -145,11 +147,16 @@ fn apply_constraint_propagation(grid: &mut [u8; 81], state: &mut ConstraintState
                 
                 if possible.count_ones() == 1 {
                     let num = ConstraintState::extract_single_value(possible);
-                    grid[idx] = num;
-                    state.place(row, col, num);
-                    progress = true;
+                    updates.push((idx, row, col, num));
                 }
             }
+        }
+        
+        // Apply the updates
+        for (idx, row, col, num) in updates {
+            grid[idx] = num;
+            state.place(row, col, num);
+            progress = true;
         }
         
         // Hidden singles: numbers that can only go in one place
